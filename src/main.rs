@@ -9,6 +9,24 @@ use rocket::tokio::{
 use rocket::fs::FileServer;
 use rocket::http::CookieJar;
 
+mod json_endpoints;
+
+
+#[derive(FromFormField)]
+enum Lang {
+    #[field(value = "en")]
+    English,
+    #[field(value = "uk-UA")]
+    #[field(value = "uk")]
+    Ukrainian,
+}
+
+#[derive(FromForm)]
+struct Options<'r> {
+    emoji: bool,
+    name: Option<&'r str>,
+}
+
 
 #[get("/")]
 fn index() -> &'static str {
@@ -83,14 +101,37 @@ fn cookies(cookies: &CookieJar<'_>) -> String {
     cookies.iter().map(|crumb| format!("{}: {}", crumb.name(), crumb.value())).collect::<Vec<_>>().join(", ")
 }
 
+#[get("/greet?<lang>&<opt..>")]
+fn greet(lang: Option<Lang>, opt: Options<'_>) -> String {
+    let mut greeting = String::new();
+    if opt.emoji {
+        greeting.push_str("👋 ");
+    }
+
+    match lang {
+        Some(Lang::Ukrainian) => greeting.push_str("Привіт"),
+        Some(Lang::English) => greeting.push_str("Hello"),
+        None => greeting.push_str("Hi"),
+    }
+
+    if let Some(name) = opt.name {
+        greeting.push_str(", ");
+        greeting.push_str(name);
+    }
+
+    greeting.push('!');
+    greeting
+}
+
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
     let _rocket = rocket::build()
-        .mount("/", routes![index, world, hello, delay, blocking_task, cookie_message, cookies])
+        .mount("/", routes![index, greet, world, hello, delay, blocking_task, cookie_message, cookies])
         .mount("/ignore", routes![ignore_part, ignore_everything])
         .mount("/route_ranking", routes![user_usize, user_int, user_str])
         // .mount("/static", routes![files])
         .mount("/static", FileServer::from("static/"))
+        .attach(json_endpoints::stage())
         .launch()
         .await?;
 
